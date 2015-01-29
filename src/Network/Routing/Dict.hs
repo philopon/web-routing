@@ -66,6 +66,7 @@ instance ShowDict kvs => Show (Dict kvs) where
         (intercalate ", " . map (\(k, v, t) -> k ++ " = " ++ v ++ " :: " ++ show t) $ showDict 0 d)
         ++ "}"
 
+-- | empty dictionary
 empty :: Dict '[]
 empty = Dict Tip
 
@@ -93,8 +94,7 @@ type k </ v = HasKey k v ~ AlreadyExists k
 -- >>> a
 -- Dict {foo = 12 :: Int}
 --
--- >>> let b = add (Proxy :: Proxy "bar") "baz" a
--- >>> b
+-- >>> add (Proxy :: Proxy "bar") "baz" a
 -- Dict {bar = "baz" :: [Char], foo = 12 :: Int}
 add :: (k </ kvs) => proxy k -> v -> Dict kvs -> Dict (k := v ': kvs)
 add _ v (Dict d) = Dict (unsafeCoerce v `cons` d)

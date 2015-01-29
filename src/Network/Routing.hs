@@ -7,7 +7,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 
--- | >>> :set -XDataKinds -XOverloadedStrings
+-- | >>> :set -XDataKinds -XOverloadedStrings -XNoMonomorphismRestriction
 -- >>> import Data.Proxy (Proxy(..))
 -- >>> import Text.Read(readMaybe)
 -- >>> import qualified Data.Text as T
@@ -60,6 +60,7 @@ module Network.Routing
       -- *** action
     , action
       -- *** get parameter
+    , Raw
     , raw
     , fetch
     , any
@@ -114,13 +115,23 @@ root = id
 exact :: T.Text -> Path d m a -> Path d m a
 exact = Exact
 
+type Raw m d d'
+    = D.Dict d -- ^ input dictionary
+    -> [T.Text] -- ^ input path information
+    -> m (D.Dict d', [T.Text]) -- ^ output dictionary and path information
+
+-- | raw get parameter function
+--
+-- if you want matching exact path, use 'exact' for performance
 raw :: String -- ^ pretty print
-    -> (D.Dict d -> [T.Text] -> m (D.Dict d', [T.Text]))
+    -> Raw m d d'
     -> Path d' m a -> Path d m a
 raw = Param
 
+-- ^ get one directory as parameter.
 fetch :: (MonadPlus m, KnownSymbol k, k D.</ d)
-      => proxy k -> (T.Text -> Maybe v)
+      => proxy k -- ^ dictionary key
+      -> (T.Text -> Maybe v) -- ^ reading function
       -> Path (k D.:= v ': d) m a -> Path d m a
 fetch p f = Param (':' : symbolVal p) go
   where
@@ -129,12 +140,14 @@ fetch p f = Param (':' : symbolVal p) go
         Nothing -> mzero
         Just v  -> return (D.add p v d, ts)
 
+-- | drop any pathes
 any :: Monad m => Path d m a -> Path d m a
 any = Param "**" go
   where
     go d _ = return (d, [])
 
-rest :: (KnownSymbol k, Monad m, k D.</ d) => proxy k
+-- | take any pathes as [Text]
+rest :: (KnownSymbol k, Monad m, k D.</ d) => proxy k -- ^ dictionary key
      -> Path (k D.:= [T.Text] ': d) m a -> Path d m a
 rest k = Param (':': symbolVal k ++ "**") go
   where
@@ -162,7 +175,6 @@ data Router d m a where
         , methods   :: H.HashMap Method (D.Dict d -> m a)
         , anyMethod :: D.Dict d -> m a
         } -> Router d m a
-
 
 emptyRouter :: MonadPlus m => Router d m a
 emptyRouter = Router { params    = PNil
@@ -200,6 +212,7 @@ add' (Action Nothing n) r =
 add :: MonadPlus m => Path '[] m a -> Router '[] m a -> Router '[] m a
 add = add'
 
+-- | infix version of 'add'
 (+|) :: MonadPlus m => Path '[] m a -> Router '[] m a -> Router '[] m a
 (+|) = add
 
