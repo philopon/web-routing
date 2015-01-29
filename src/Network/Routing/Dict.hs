@@ -8,6 +8,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns #-} -- for ghc-7.6
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE CPP #-}
 
@@ -35,10 +36,10 @@ import GHC.Exts(Constraint)
 import Network.Routing.Tree
 
 #if __GLASGOW_HASKELL__ > 707
-import Data.Proxy
 import GHC.TypeLits
 #endif
 
+import Network.Routing.Compat
 import Data.Typeable(typeOf, Typeable, TypeRep)
 import Data.List(intercalate)
 import Unsafe.Coerce
