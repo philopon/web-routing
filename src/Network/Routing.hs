@@ -63,13 +63,12 @@ module Network.Routing
     ( Method
       -- * Path 
     , Path
-      -- ** Path constructors
     , root
-      -- *** children
+      -- ** children
     , exact
-      -- *** action
+      -- ** action
     , action
-      -- *** get parameter
+      -- ** get parameter
     , Raw
     , raw
     , fetch
@@ -79,7 +78,20 @@ module Network.Routing
     -- * Router
     , Router
     , empty
-    , add, (+|)
+    , insert, (+|)
+
+    -- * Store/Dict
+    , type (D.</)
+    , D.KV(..)
+    , D.ShowDict
+    , D.Member
+    , D.Members
+
+    , D.Store
+    , D.add
+
+    , D.Dict
+    , D.get
 
     -- * execute
     , execute
@@ -219,14 +231,14 @@ add' (Action Nothing n) r =
     r { anyMethod = \d -> anyMethod r d `mplus` n d }
 
 -- | insert path to router
-add :: MonadPlus m => Path '[] m a -> Router '[] m a -> Router '[] m a
-add = add'
+insert :: MonadPlus m => Path '[] m a -> Router '[] m a -> Router '[] m a
+insert = add'
 
--- | infix version of 'add'
+-- | infix version of `insert`
 (+|) :: MonadPlus m => Path '[] m a -> Router '[] m a -> Router '[] m a
-(+|) = add
+(+|) = insert
 
-infixr `add`
+infixr `insert`
 infixr +|
 
 -- | execute router
