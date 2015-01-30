@@ -14,11 +14,15 @@
 --
 -- 1. create path
 --
--- >>> data Result = A | B T.Text | C | D Int deriving Show
+-- >>> data Result = A | B T.Text | C | D Int | E T.Text deriving Show
+--
+-- >>> let key = Proxy :: Proxy "key"
+--
 -- >>> let a = root $ exact "foo" $ action Nothing (\_ -> Just A)
--- >>> let b = root $ exact "bar" $ fetch (Proxy :: Proxy "key") Just $ action Nothing (\d -> Just . B $ D.get (Proxy :: Proxy "key") d)
+-- >>> let b = root $ exact "bar" $ fetch key Just $ action Nothing (\d -> Just . B $ D.get key d)
 -- >>> let c = root $ exact "bar" $ any $ action (Just "GET") (\_ -> Just C)
--- >>> let d = root $ exact "bar" $ fetch (Proxy :: Proxy "key") (\t -> readMaybe (T.unpack t) :: Maybe Int) $ action Nothing (\d -> Just . D $ D.get (Proxy :: Proxy "key") d)
+-- >>> let d = root $ exact "bar" $ fetch key (\t -> readMaybe (T.unpack t) :: Maybe Int) $ action Nothing (\d -> Just . D $ D.get key d)
+-- >>> let e = root $ exact "foo" $ fetch key Just $ exact "qux" $ action (Just "POST") (\d -> Just . E $ D.get key d)
 -- >>> a
 -- * /foo
 -- >>> b
@@ -27,10 +31,12 @@
 -- GET /bar/**
 -- >>> d
 -- * /bar/:key
+-- >>> e
+-- POST /foo/:key/qux
 --
 -- 2. create router
 --
--- >>> let r = d +| a +| b +| c +| empty
+-- >>> let r = e +| d +| a +| b +| c +| empty
 --
 -- 3. execute router
 --
@@ -48,6 +54,10 @@
 -- Just C
 -- >>> run "POST" ["bar", "baz", "qux"]
 -- Nothing
+-- >>> run "POST" ["foo", "bar", "baz"]
+-- Nothing
+-- >>> run "POST" ["foo", "bar", "qux"]
+-- Just (E "bar")
 
 module Network.Routing
     ( Method
