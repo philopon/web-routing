@@ -98,7 +98,7 @@ import qualified Data.ByteString.Char8 as SC
 type Method = S.ByteString
 
 data Params d m a where
-    PCons :: (D.Dict d -> [T.Text] -> m (D.Dict d', [T.Text]))
+    PCons :: (D.Store d -> [T.Text] -> m (D.Store d', [T.Text]))
           -> Router d' m a
           -> Params d m a -> Params d m a
     PNil  :: Params d m a
@@ -107,7 +107,7 @@ data Params d m a where
 data Path d m a where
     Exact :: T.Text -> Path d m a -> Path d m a
 
-    Param :: String -> (D.Dict d -> [T.Text] -> m (D.Dict d', [T.Text]))
+    Param :: String -> (D.Store d -> [T.Text] -> m (D.Store d', [T.Text]))
           -> Path d' m a -> Path d m a
 
     Action :: Maybe Method
@@ -126,9 +126,9 @@ exact :: T.Text -> Path d m a -> Path d m a
 exact = Exact
 
 type Raw m d d'
-    = D.Dict d -- ^ input dictionary
+    = D.Store d -- ^ input dictionary
     -> [T.Text] -- ^ input path information
-    -> m (D.Dict d', [T.Text]) -- ^ output dictionary and path information
+    -> m (D.Store d', [T.Text]) -- ^ output dictionary and path information
 
 -- | raw get parameter function
 --
@@ -233,11 +233,11 @@ infixr +|
 execute :: MonadPlus m => Router '[] m a -> Method -> [T.Text] -> m a
 execute = execute' D.empty
 
-execute' :: MonadPlus m => D.Dict d -> Router d m a -> Method -> [T.Text] -> m a
+execute' :: MonadPlus m => D.Store d -> Router d m a -> Method -> [T.Text] -> m a
 execute' d Router{params, methods, anyMethod} m [] = fetching d m [] params `mplus`
     case H.lookup m methods of
-        Nothing -> anyMethod d
-        Just f  -> f d
+        Nothing -> anyMethod (D.mkDict d)
+        Just f  -> f (D.mkDict d)
 
 execute' d Router{params, children} m pps@(p:ps) = child `mplus` fetching d m pps params
   where
@@ -245,7 +245,7 @@ execute' d Router{params, children} m pps@(p:ps) = child `mplus` fetching d m pp
         Nothing -> mzero
         Just c  -> execute' d c m ps
 
-fetching :: MonadPlus m => D.Dict d -> Method -> [T.Text] -> Params d m a -> m a
+fetching :: MonadPlus m => D.Store d -> Method -> [T.Text] -> Params d m a -> m a
 fetching d m pps = loop
   where
     loop PNil = mzero
