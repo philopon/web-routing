@@ -7,8 +7,8 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 
--- | >>> :set -XDataKinds -XOverloadedStrings -XNoMonomorphismRestriction
--- >>> import Data.Proxy (Proxy(..))
+-- | >>> :set -XDataKinds -XPolyKinds -XOverloadedStrings
+-- >>> data Proxy s = Proxy
 -- >>> import Text.Read(readMaybe)
 -- >>> import qualified Data.Text as T
 --
