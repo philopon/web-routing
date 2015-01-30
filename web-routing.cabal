@@ -1,5 +1,5 @@
 name:                web-routing
-version:             0.1.1
+version:             0.1.2
 synopsis:            simple routing library
 -- description:         
 license:             MIT
@@ -39,6 +39,7 @@ test-suite tasty
   type:                exitcode-stdio-1.0
   ghc-options:         -threaded
   main-is:             tasty.hs
+  other-modules:       Tree
   hs-source-dirs:      tests, src
   build-depends:       base             >=4.6  && <4.8
                      , tasty            >=0.10 && <0.11
