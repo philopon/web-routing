@@ -7,18 +7,22 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 
--- | >>> :set -XDataKinds -XOverloadedStrings -XNoMonomorphismRestriction
--- >>> import Data.Proxy (Proxy(..))
+-- | >>> :set -XDataKinds -XPolyKinds -XOverloadedStrings
+-- >>> data Proxy s = Proxy
 -- >>> import Text.Read(readMaybe)
 -- >>> import qualified Data.Text as T
 --
 -- 1. create path
 --
--- >>> data Result = A | B T.Text | C | D Int deriving Show
+-- >>> data Result = A | B T.Text | C | D Int | E T.Text deriving Show
+--
+-- >>> let key = Proxy :: Proxy "key"
+--
 -- >>> let a = root $ exact "foo" $ action Nothing (\_ -> Just A)
--- >>> let b = root $ exact "bar" $ fetch (Proxy :: Proxy "key") Just $ action Nothing (\d -> Just . B $ D.get (Proxy :: Proxy "key") d)
+-- >>> let b = root $ exact "bar" $ fetch key Just $ action Nothing (\d -> Just . B $ D.get key d)
 -- >>> let c = root $ exact "bar" $ any $ action (Just "GET") (\_ -> Just C)
--- >>> let d = root $ exact "bar" $ fetch (Proxy :: Proxy "key") (\t -> readMaybe (T.unpack t) :: Maybe Int) $ action Nothing (\d -> Just . D $ D.get (Proxy :: Proxy "key") d)
+-- >>> let d = root $ exact "bar" $ fetch key (\t -> readMaybe (T.unpack t) :: Maybe Int) $ action Nothing (\d -> Just . D $ D.get key d)
+-- >>> let e = root $ exact "foo" $ fetch key Just $ exact "qux" $ action (Just "POST") (\d -> Just . E $ D.get key d)
 -- >>> a
 -- * /foo
 -- >>> b
@@ -27,10 +31,12 @@
 -- GET /bar/**
 -- >>> d
 -- * /bar/:key
+-- >>> e
+-- POST /foo/:key/qux
 --
 -- 2. create router
 --
--- >>> let r = d +| a +| b +| c +| empty
+-- >>> let r = e +| d +| a +| b +| c +| empty
 --
 -- 3. execute router
 --
@@ -48,18 +54,21 @@
 -- Just C
 -- >>> run "POST" ["bar", "baz", "qux"]
 -- Nothing
+-- >>> run "POST" ["foo", "bar", "baz"]
+-- Nothing
+-- >>> run "POST" ["foo", "bar", "qux"]
+-- Just (E "bar")
 
 module Network.Routing
     ( Method
       -- * Path 
     , Path
-      -- ** Path constructors
     , root
-      -- *** children
+      -- ** children
     , exact
-      -- *** action
+      -- ** action
     , action
-      -- *** get parameter
+      -- ** get parameter
     , Raw
     , raw
     , fetch
@@ -69,26 +78,31 @@ module Network.Routing
     -- * Router
     , Router
     , empty
-    , add, (+|)
+    , insert, (+|)
 
     -- * execute
     , execute
+
+    -- * reexport
+    , module Network.Routing.Dict
     ) where
 
 import Prelude hiding(any)
 import Control.Monad(MonadPlus(..))
 
 import Network.Routing.Compat(KnownSymbol, symbolVal)
-import qualified Network.Routing.Dict as D
+import qualified Network.Routing.Dict.Internal as D
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as SC
 
+import Network.Routing.Dict
+
 type Method = S.ByteString
 
 data Params d m a where
-    PCons :: (D.Dict d -> [T.Text] -> m (D.Dict d', [T.Text]))
+    PCons :: (D.Store d -> [T.Text] -> m (D.Store d', [T.Text]))
           -> Router d' m a
           -> Params d m a -> Params d m a
     PNil  :: Params d m a
@@ -97,7 +111,7 @@ data Params d m a where
 data Path d m a where
     Exact :: T.Text -> Path d m a -> Path d m a
 
-    Param :: String -> (D.Dict d -> [T.Text] -> m (D.Dict d', [T.Text]))
+    Param :: String -> (D.Store d -> [T.Text] -> m (D.Store d', [T.Text]))
           -> Path d' m a -> Path d m a
 
     Action :: Maybe Method
@@ -116,9 +130,9 @@ exact :: T.Text -> Path d m a -> Path d m a
 exact = Exact
 
 type Raw m d d'
-    = D.Dict d -- ^ input dictionary
+    = D.Store d -- ^ input dictionary
     -> [T.Text] -- ^ input path information
-    -> m (D.Dict d', [T.Text]) -- ^ output dictionary and path information
+    -> m (D.Store d', [T.Text]) -- ^ output dictionary and path information
 
 -- | raw get parameter function
 --
@@ -209,25 +223,25 @@ add' (Action Nothing n) r =
     r { anyMethod = \d -> anyMethod r d `mplus` n d }
 
 -- | insert path to router
-add :: MonadPlus m => Path '[] m a -> Router '[] m a -> Router '[] m a
-add = add'
+insert :: MonadPlus m => Path '[] m a -> Router '[] m a -> Router '[] m a
+insert = add'
 
--- | infix version of 'add'
+-- | infix version of `insert`
 (+|) :: MonadPlus m => Path '[] m a -> Router '[] m a -> Router '[] m a
-(+|) = add
+(+|) = insert
 
-infixr `add`
+infixr `insert`
 infixr +|
 
 -- | execute router
 execute :: MonadPlus m => Router '[] m a -> Method -> [T.Text] -> m a
 execute = execute' D.empty
 
-execute' :: MonadPlus m => D.Dict d -> Router d m a -> Method -> [T.Text] -> m a
+execute' :: MonadPlus m => D.Store d -> Router d m a -> Method -> [T.Text] -> m a
 execute' d Router{params, methods, anyMethod} m [] = fetching d m [] params `mplus`
     case H.lookup m methods of
-        Nothing -> anyMethod d
-        Just f  -> f d
+        Nothing -> anyMethod (D.mkDict d)
+        Just f  -> f (D.mkDict d)
 
 execute' d Router{params, children} m pps@(p:ps) = child `mplus` fetching d m pps params
   where
@@ -235,7 +249,7 @@ execute' d Router{params, children} m pps@(p:ps) = child `mplus` fetching d m pp
         Nothing -> mzero
         Just c  -> execute' d c m ps
 
-fetching :: MonadPlus m => D.Dict d -> Method -> [T.Text] -> Params d m a -> m a
+fetching :: MonadPlus m => D.Store d -> Method -> [T.Text] -> Params d m a -> m a
 fetching d m pps = loop
   where
     loop PNil = mzero
