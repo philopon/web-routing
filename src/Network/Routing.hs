@@ -248,7 +248,7 @@ infixr +|
 
 -- | execute router
 execute :: MonadPlus m => Router '[] m a -> Method -> [T.Text] -> m a
-execute = execute' D.empty
+execute = execute' D.emptyStore
 
 execute' :: MonadPlus m => D.Store d -> Router d m a -> Method -> [T.Text] -> m a
 execute' d Router{params, methods, anyMethod} m [] = fetching d m [] params `mplus`
