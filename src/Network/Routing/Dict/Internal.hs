@@ -17,7 +17,8 @@ module Network.Routing.Dict.Internal
     ( Dict, Store
     , ShowDict
     , KV(..)
-    , empty
+    , emptyStore
+    , emptyDict
     , type (</)
     , add
     , Member
@@ -51,8 +52,11 @@ instance ShowDict kvs => Show (Store kvs) where
         (intercalate ", " . map (\(k, v, t) -> k ++ " = " ++ v ++ " :: " ++ show t) $ showDict 0 (mkDict d))
         ++ "}"
 
-empty :: Store '[]
-empty = Empty
+emptyStore :: Store '[]
+emptyStore = Empty
+
+emptyDict :: Dict '[]
+emptyDict = mkDict Empty
 
 size :: Store kvs -> Int
 size Empty        = 0
@@ -78,7 +82,7 @@ type k </ v = HasKey k v ~ AlreadyExists k
 
 -- | O(1) add key value pair to dictionary.
 --
--- >>> let a = add (Proxy :: Proxy "foo") (12 :: Int) empty
+-- >>> let a = add (Proxy :: Proxy "foo") (12 :: Int) emptyStore
 -- >>> a
 -- Store {foo = 12 :: Int}
 --
@@ -130,7 +134,7 @@ mkDict store = runST $ mkDict' store
 
 -- | O(1) (>= ghc-7.8), O(n) (< ghc-7.8) get key from dictionary
 --
--- >>> let d = mkDict $ add (Proxy :: Proxy "foo") 12 $ add (Proxy :: Proxy "bar") "baz" empty
+-- >>> let d = mkDict $ add (Proxy :: Proxy "foo") 12 $ add (Proxy :: Proxy "bar") "baz" emptyStore
 -- >>> get (Proxy :: Proxy "foo") d
 -- 12
 -- >>> get (Proxy :: Proxy "bar") d

@@ -6,12 +6,14 @@
 module Network.Routing.Dict
     ( -- * store
       Store
-    , empty
+    , emptyStore
     , type (</)
     , add
+    , mkDict
 
       -- * dictionary
     , Dict
+    , emptyDict
     , Member
     , get
 
