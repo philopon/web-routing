@@ -84,6 +84,7 @@ module Network.Routing
     , execute
 
     -- * reexport
+    -- | excluding empty, ShowDict
     , module Network.Routing.Dict
     ) where
 
@@ -98,6 +99,18 @@ import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as SC
 
 import Network.Routing.Dict
+    ( Store
+    , type (</)
+    , add
+
+    , Dict
+    , Member
+    , get
+
+    , KV(..)
+
+    , Members
+    )
 
 type Method = S.ByteString
 
