@@ -15,8 +15,9 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Network.Routing
-  other-modules:       Network.Routing.Compat
                        Network.Routing.Dict
+  other-modules:       Network.Routing.Compat
+                       Network.Routing.Dict.Internal
   build-depends:       base                 >=4.6  && <4.8
                      , bytestring           >=0.10 && <0.11
                      , text                 >=1.1  && <1.3 

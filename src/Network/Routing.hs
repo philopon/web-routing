@@ -80,32 +80,24 @@ module Network.Routing
     , empty
     , insert, (+|)
 
-    -- * Store/Dict
-    , type (D.</)
-    , D.KV(..)
-    , D.ShowDict
-    , D.Member
-    , D.Members
-
-    , D.Store
-    , D.add
-
-    , D.Dict
-    , D.get
-
     -- * execute
     , execute
+
+    -- * reexport
+    , module Network.Routing.Dict
     ) where
 
 import Prelude hiding(any)
 import Control.Monad(MonadPlus(..))
 
 import Network.Routing.Compat(KnownSymbol, symbolVal)
-import qualified Network.Routing.Dict as D
+import qualified Network.Routing.Dict.Internal as D
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as SC
+
+import Network.Routing.Dict
 
 type Method = S.ByteString
 
