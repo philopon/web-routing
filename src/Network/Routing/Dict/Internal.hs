@@ -137,7 +137,7 @@ mkDict store = runST $ mkDict' store
 -- "baz"
 get :: Member k v kvs => proxy k -> Dict kvs -> v
 
-#if __GLASGOW_HASKELL__ < 707
+#if __GLASGOW_HASKELL__ > 707
 type family Ix (k :: Symbol) (kvs :: [KV *]) :: Nat where
   Ix k (k  := v ': kvs) = 0
   Ix k (k' := v ': kvs) = 1 + Ix k kvs
