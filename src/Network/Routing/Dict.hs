@@ -6,6 +6,7 @@
 module Network.Routing.Dict
     ( -- * store
       Store
+    , empty
     , type (</)
     , add
 
