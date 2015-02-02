@@ -71,7 +71,7 @@ emptyStore = Store 0 Empty
 emptyDict :: Dict '[]
 emptyDict = mkDict emptyStore
 
--- | pretty print type error of 'add'.
+-- | (kind) pretty print type error of 'add'.
 --
 -- @
 -- > add (Proxy :: Proxy "a") 12 $ add (Proxy :: Proxy "a") "a" emptyStore
@@ -155,9 +155,9 @@ mkDict store = runST $ mkDict' store
 -- "baz"
 get :: Member k v kvs => proxy k -> Dict kvs -> v
 
-#if __GLASGOW_HASKELL__ > 707
-
--- | pretty print type error of 'get'
+-- | (kind) pretty print type error of 'get'
+--
+--  used only >= ghc-7.8
 --
 -- @
 -- > get (Proxy :: Proxy "b") (mkDict $ add (Proxy :: Proxy "a") "a" emptyStore)
@@ -166,6 +166,8 @@ get :: Member k v kvs => proxy k -> Dict kvs -> v
 data GetResult
     = NotInDicrionary Nat
     | Key Symbol
+
+#if __GLASGOW_HASKELL__ > 707
 
 type family Ix' (i :: Nat) (k :: Symbol) (kvs :: [KV *]) :: GetResult where
   Ix' i k '[] = Key k
