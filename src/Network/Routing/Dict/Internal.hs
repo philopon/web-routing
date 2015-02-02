@@ -24,6 +24,8 @@ module Network.Routing.Dict.Internal
     , Member
     , get
     , mkDict
+    , AddResult(..)
+    , GetResult(..)
     ) where
 
 import GHC.Exts(Any)
@@ -69,23 +71,29 @@ emptyStore = Store 0 Empty
 emptyDict :: Dict '[]
 emptyDict = mkDict emptyStore
 
--- | result type for pretty printing type error.
-data HasKeyResult
-    = AlreadyExists Symbol
+-- | pretty print type error of 'add'.
+--
+-- @
+-- > add (Proxy :: Proxy "a") 12 $ add (Proxy :: Proxy "a") "a" emptyStore
+-- Couldn't match type ‘'Dictionary’ with ‘'AlreadyHasKey "a"’
+-- @
+
+data AddResult
+    = AlreadyHasKey Symbol
     | Dictionary
 
 #if __GLASGOW_HASKELL__ > 707
-type family HasKey (k :: Symbol) (kvs :: [KV *]) :: HasKeyResult where
-  HasKey k '[] = AlreadyExists k
+type family HasKey (k :: Symbol) (kvs :: [KV *]) :: AddResult where
+  HasKey k '[] = AlreadyHasKey k
   HasKey k (k  := v ': kvs) = Dictionary
   HasKey k (k' := v ': kvs) = HasKey k kvs
 #else
-type family   HasKey (k :: Symbol) (kvs :: [KV *]) :: HasKeyResult
-type instance HasKey k kvs = AlreadyExists k
+type family   HasKey (k :: Symbol) (kvs :: [KV *]) :: AddResult
+type instance HasKey k kvs = AlreadyHasKey k
 #endif
 
 -- | 'not elem key' constraint(ghc >= 7.8)
-type k </ v = HasKey k v ~ AlreadyExists k
+type k </ v = HasKey k v ~ AlreadyHasKey k
 
 -- | O(1) add key value pair to dictionary.
 --
@@ -148,12 +156,28 @@ mkDict store = runST $ mkDict' store
 get :: Member k v kvs => proxy k -> Dict kvs -> v
 
 #if __GLASGOW_HASKELL__ > 707
-type family Ix (k :: Symbol) (kvs :: [KV *]) :: Nat where
-  Ix k (k  := v ': kvs) = 0
-  Ix k (k' := v ': kvs) = 1 + Ix k kvs
 
-getImpl :: forall proxy k kvs v. KnownNat (Ix k kvs) => proxy (k :: Symbol) -> Dict kvs -> v
-getImpl _ (Dict d) = unsafeFromAny $ d `P.indexArray` fromIntegral (natVal (Proxy :: Proxy (Ix k kvs)))
+-- | pretty print type error of 'get'
+--
+-- @
+-- > get (Proxy :: Proxy "b") (mkDict $ add (Proxy :: Proxy "a") "a" emptyStore)
+-- Couldn't match type ‘'Key "b"’ with ‘'NotInDicrionary i’
+-- @
+data GetResult
+    = NotInDicrionary Nat
+    | Key Symbol
+
+type family Ix' (i :: Nat) (k :: Symbol) (kvs :: [KV *]) :: GetResult where
+  Ix' i k '[] = Key k
+  Ix' i k (k  := v ': kvs) = NotInDicrionary i
+  Ix' i k (k' := v ': kvs) = Ix' (i + 1) k kvs
+
+type Ix = Ix' 0
+
+type Index = NotInDicrionary
+
+getImpl :: forall i proxy k kvs v. (Index i ~ Ix k kvs, KnownNat i) => proxy (k :: Symbol) -> Dict kvs -> v
+getImpl _ (Dict d) = unsafeFromAny $ d `P.indexArray` fromIntegral (natVal (Proxy :: Proxy i))
 
 class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: proxy k -> Dict kvs -> v
@@ -162,7 +186,7 @@ instance Member k v (k := v ': kvs) where
     get' = getImpl
     {-# INLINE get' #-}
 
-instance (Member k v kvs, KnownNat (Ix k (k' := v' ': kvs))) => Member k v (k' := v' ': kvs) where
+instance (Member k v kvs, Index i ~ Ix k (k' := v' ': kvs), KnownNat i) => Member k v (k' := v' ': kvs) where
     get' = getImpl
     {-# INLINE get' #-}
 
