@@ -84,7 +84,11 @@ module Network.Routing
     , execute
 
     -- * reexport
-    -- | excluding empty, ShowDict
+    -- | 'Store', '</', 'add'
+    --
+    -- 'Dict', 'Member', 'get'
+    --
+    -- 'KV'((':=')), 'Members'
     , module Network.Routing.Dict
     ) where
 

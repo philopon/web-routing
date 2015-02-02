@@ -37,30 +37,37 @@ import qualified Control.Monad.Primitive as P
 import qualified Data.Primitive as P
 import Control.Monad.ST (ST, runST)
 
+unsafeToAny :: a -> Any
+unsafeToAny = unsafeCoerce
+
+unsafeFromAny :: Any -> a
+unsafeFromAny = unsafeCoerce
+
 -- | (kind) key-value pair
 data KV v = Symbol := v
 
 -- | data store to construct dictionary.
 --
 -- `add` and `mkDict` operation only allowed.
-data Store (kvs :: [KV *]) where
-    Cons  :: {-# UNPACK #-} !Int -> v -> Store kvs -> Store (k := v ': kvs)
-    Empty :: Store '[]
+data KVList (kvs :: [KV *]) where
+    Cons  :: v -> KVList kvs -> KVList (k := v ': kvs)
+    Empty :: KVList '[]
 
 instance ShowDict kvs => Show (Store kvs) where
     show d = "Store {" ++
         (intercalate ", " . map (\(k, v, t) -> k ++ " = " ++ v ++ " :: " ++ show t) $ showDict 0 (mkDict d))
         ++ "}"
 
+data Store kvs = Store
+    { storeSize :: {-# UNPACK #-} !Int
+    , storeBody :: KVList kvs
+    }
+
 emptyStore :: Store '[]
-emptyStore = Empty
+emptyStore = Store 0 Empty
 
 emptyDict :: Dict '[]
-emptyDict = mkDict Empty
-
-size :: Store kvs -> Int
-size Empty        = 0
-size (Cons l _ _) = l
+emptyDict = mkDict emptyStore
 
 -- | result type for pretty printing type error.
 data HasKeyResult
@@ -89,8 +96,7 @@ type k </ v = HasKey k v ~ AlreadyExists k
 -- >>> add (Proxy :: Proxy "bar") "baz" a
 -- Store {bar = "baz" :: [Char], foo = 12 :: Int}
 add :: (k </ kvs) => proxy k -> v -> Store kvs -> Store (k := v ': kvs)
-add _ v Empty          = Cons 1 v Empty
-add _ v c@(Cons i _ _) = Cons (i + 1) v c
+add _ v (Store l c) = Store (l + 1) (Cons v c)
 
 -- | heterogeneous dictionary
 --
@@ -105,7 +111,7 @@ instance ShowDict '[] where
 
 instance (KnownSymbol k, Typeable v, Show v, ShowDict kvs) => ShowDict (k := v ': kvs) where
     showDict i (Dict t) =
-        (symbolVal (Proxy :: Proxy k), show (unsafeCoerce $ P.indexArray t i :: v), typeOf (undefined :: v)):
+        (symbolVal (Proxy :: Proxy k), show (unsafeFromAny $ P.indexArray t i :: v), typeOf (undefined :: v)):
         showDict (i + 1) (unsafeCoerce $ Dict t :: Dict kvs)
 
 instance ShowDict kvs => Show (Dict kvs) where
@@ -115,18 +121,18 @@ instance ShowDict kvs => Show (Dict kvs) where
 
 mkDict' :: forall s kvs. Store kvs -> ST s (Dict kvs)
 mkDict' store = do
-    ary <- P.newArray (size store) undefined
-    go (size store) ary
+    ary <- P.newArray (storeSize store) undefined
+    go ary
     Dict `fmap` P.unsafeFreezeArray ary
   where
-    go :: Int -> P.MutableArray (P.PrimState (ST s)) Any -> ST s ()
-    go size' array = loop store
+    go :: P.MutableArray (P.PrimState (ST s)) Any -> ST s ()
+    go array = loop 0 (storeBody store)
       where
-        loop :: Store kvs -> ST s ()
-        loop (Cons i v ss) = do
-            P.writeArray array (size' - i) (unsafeCoerce v)
-            loop (unsafeCoerce ss)
-        loop Empty = return ()
+        loop :: Int -> KVList kvs' -> ST s ()
+        loop !i (Cons v ss) = do
+            P.writeArray array i (unsafeToAny v)
+            loop (i + 1) ss
+        loop _ Empty = return ()
 
 -- | O(n) convert "Store" to "Dictionary".
 mkDict :: Store kvs -> Dict kvs
@@ -147,7 +153,7 @@ type family Ix (k :: Symbol) (kvs :: [KV *]) :: Nat where
   Ix k (k' := v ': kvs) = 1 + Ix k kvs
 
 getImpl :: forall proxy k kvs v. KnownNat (Ix k kvs) => proxy (k :: Symbol) -> Dict kvs -> v
-getImpl _ (Dict d) = unsafeCoerce $ d `P.indexArray` fromIntegral (natVal (Proxy :: Proxy (Ix k kvs)))
+getImpl _ (Dict d) = unsafeFromAny $ d `P.indexArray` fromIntegral (natVal (Proxy :: Proxy (Ix k kvs)))
 
 class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: proxy k -> Dict kvs -> v
@@ -166,7 +172,7 @@ class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: Int -> proxy k -> Dict kvs -> v
 
 instance Member k v (k := v ': kvs) where
-    get' !i _ (Dict d) = unsafeCoerce $ d `P.indexArray` i
+    get' !i _ (Dict d) = unsafeFromAny $ d `P.indexArray` i
 
 instance Member k v kvs => Member k v (k' := v' ': kvs) where
     get' !i k d = get' (i + 1) k (unsafeCoerce d :: Dict kvs)
