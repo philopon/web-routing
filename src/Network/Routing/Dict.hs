@@ -23,6 +23,10 @@ module Network.Routing.Dict
 
       -- * convenient
     , Members
+
+      -- * pretty print type errors
+    , GetResult(..)
+    , AddResult(..)
     ) where
 
 import GHC.Exts(Constraint)

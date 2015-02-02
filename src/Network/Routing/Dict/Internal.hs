@@ -24,6 +24,8 @@ module Network.Routing.Dict.Internal
     , Member
     , get
     , mkDict
+    , AddResult(..)
+    , GetResult(..)
     ) where
 
 import GHC.Exts(Any)
@@ -37,48 +39,61 @@ import qualified Control.Monad.Primitive as P
 import qualified Data.Primitive as P
 import Control.Monad.ST (ST, runST)
 
+unsafeToAny :: a -> Any
+unsafeToAny = unsafeCoerce
+
+unsafeFromAny :: Any -> a
+unsafeFromAny = unsafeCoerce
+
 -- | (kind) key-value pair
 data KV v = Symbol := v
 
 -- | data store to construct dictionary.
 --
 -- `add` and `mkDict` operation only allowed.
-data Store (kvs :: [KV *]) where
-    Cons  :: {-# UNPACK #-} !Int -> v -> Store kvs -> Store (k := v ': kvs)
-    Empty :: Store '[]
+data KVList (kvs :: [KV *]) where
+    Cons  :: v -> KVList kvs -> KVList (k := v ': kvs)
+    Empty :: KVList '[]
 
 instance ShowDict kvs => Show (Store kvs) where
     show d = "Store {" ++
         (intercalate ", " . map (\(k, v, t) -> k ++ " = " ++ v ++ " :: " ++ show t) $ showDict 0 (mkDict d))
         ++ "}"
 
+data Store kvs = Store
+    { storeSize :: {-# UNPACK #-} !Int
+    , storeBody :: KVList kvs
+    }
+
 emptyStore :: Store '[]
-emptyStore = Empty
+emptyStore = Store 0 Empty
 
 emptyDict :: Dict '[]
-emptyDict = mkDict Empty
+emptyDict = mkDict emptyStore
 
-size :: Store kvs -> Int
-size Empty        = 0
-size (Cons l _ _) = l
+-- | (kind) pretty print type error of 'add'.
+--
+-- @
+-- > add (Proxy :: Proxy "a") 12 $ add (Proxy :: Proxy "a") "a" emptyStore
+-- Couldn't match type ‘'Dictionary’ with ‘'AlreadyHasKey "a"’
+-- @
 
--- | result type for pretty printing type error.
-data HasKeyResult
-    = AlreadyExists Symbol
+data AddResult
+    = AlreadyHasKey Symbol
     | Dictionary
 
 #if __GLASGOW_HASKELL__ > 707
-type family HasKey (k :: Symbol) (kvs :: [KV *]) :: HasKeyResult where
-  HasKey k '[] = AlreadyExists k
+type family HasKey (k :: Symbol) (kvs :: [KV *]) :: AddResult where
+  HasKey k '[] = AlreadyHasKey k
   HasKey k (k  := v ': kvs) = Dictionary
   HasKey k (k' := v ': kvs) = HasKey k kvs
 #else
-type family   HasKey (k :: Symbol) (kvs :: [KV *]) :: HasKeyResult
-type instance HasKey k kvs = AlreadyExists k
+type family   HasKey (k :: Symbol) (kvs :: [KV *]) :: AddResult
+type instance HasKey k kvs = AlreadyHasKey k
 #endif
 
 -- | 'not elem key' constraint(ghc >= 7.8)
-type k </ v = HasKey k v ~ AlreadyExists k
+type k </ v = HasKey k v ~ AlreadyHasKey k
 
 -- | O(1) add key value pair to dictionary.
 --
@@ -89,8 +104,7 @@ type k </ v = HasKey k v ~ AlreadyExists k
 -- >>> add (Proxy :: Proxy "bar") "baz" a
 -- Store {bar = "baz" :: [Char], foo = 12 :: Int}
 add :: (k </ kvs) => proxy k -> v -> Store kvs -> Store (k := v ': kvs)
-add _ v Empty          = Cons 1 v Empty
-add _ v c@(Cons i _ _) = Cons (i + 1) v c
+add _ v (Store l c) = Store (l + 1) (Cons v c)
 
 -- | heterogeneous dictionary
 --
@@ -105,7 +119,7 @@ instance ShowDict '[] where
 
 instance (KnownSymbol k, Typeable v, Show v, ShowDict kvs) => ShowDict (k := v ': kvs) where
     showDict i (Dict t) =
-        (symbolVal (Proxy :: Proxy k), show (unsafeCoerce $ P.indexArray t i :: v), typeOf (undefined :: v)):
+        (symbolVal (Proxy :: Proxy k), show (unsafeFromAny $ P.indexArray t i :: v), typeOf (undefined :: v)):
         showDict (i + 1) (unsafeCoerce $ Dict t :: Dict kvs)
 
 instance ShowDict kvs => Show (Dict kvs) where
@@ -115,18 +129,18 @@ instance ShowDict kvs => Show (Dict kvs) where
 
 mkDict' :: forall s kvs. Store kvs -> ST s (Dict kvs)
 mkDict' store = do
-    ary <- P.newArray (size store) undefined
-    go (size store) ary
+    ary <- P.newArray (storeSize store) undefined
+    go ary
     Dict `fmap` P.unsafeFreezeArray ary
   where
-    go :: Int -> P.MutableArray (P.PrimState (ST s)) Any -> ST s ()
-    go size' array = loop store
+    go :: P.MutableArray (P.PrimState (ST s)) Any -> ST s ()
+    go array = loop 0 (storeBody store)
       where
-        loop :: Store kvs -> ST s ()
-        loop (Cons i v ss) = do
-            P.writeArray array (size' - i) (unsafeCoerce v)
-            loop (unsafeCoerce ss)
-        loop Empty = return ()
+        loop :: Int -> KVList kvs' -> ST s ()
+        loop !i (Cons v ss) = do
+            P.writeArray array i (unsafeToAny v)
+            loop (i + 1) ss
+        loop _ Empty = return ()
 
 -- | O(n) convert "Store" to "Dictionary".
 mkDict :: Store kvs -> Dict kvs
@@ -141,13 +155,31 @@ mkDict store = runST $ mkDict' store
 -- "baz"
 get :: Member k v kvs => proxy k -> Dict kvs -> v
 
-#if __GLASGOW_HASKELL__ > 707
-type family Ix (k :: Symbol) (kvs :: [KV *]) :: Nat where
-  Ix k (k  := v ': kvs) = 0
-  Ix k (k' := v ': kvs) = 1 + Ix k kvs
+-- | (kind) pretty print type error of 'get'
+--
+--  used only >= ghc-7.8
+--
+-- @
+-- > get (Proxy :: Proxy "b") (mkDict $ add (Proxy :: Proxy "a") "a" emptyStore)
+-- Couldn't match type ‘'Key "b"’ with ‘'NotInDicrionary i’
+-- @
+data GetResult
+    = NotInDicrionary Nat
+    | Key Symbol
 
-getImpl :: forall proxy k kvs v. KnownNat (Ix k kvs) => proxy (k :: Symbol) -> Dict kvs -> v
-getImpl _ (Dict d) = unsafeCoerce $ d `P.indexArray` fromIntegral (natVal (Proxy :: Proxy (Ix k kvs)))
+#if __GLASGOW_HASKELL__ > 707
+
+type family Ix' (i :: Nat) (k :: Symbol) (kvs :: [KV *]) :: GetResult where
+  Ix' i k '[] = Key k
+  Ix' i k (k  := v ': kvs) = NotInDicrionary i
+  Ix' i k (k' := v ': kvs) = Ix' (i + 1) k kvs
+
+type Ix = Ix' 0
+
+type Index = NotInDicrionary
+
+getImpl :: forall i proxy k kvs v. (Index i ~ Ix k kvs, KnownNat i) => proxy (k :: Symbol) -> Dict kvs -> v
+getImpl _ (Dict d) = unsafeFromAny $ d `P.indexArray` fromIntegral (natVal (Proxy :: Proxy i))
 
 class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: proxy k -> Dict kvs -> v
@@ -156,7 +188,7 @@ instance Member k v (k := v ': kvs) where
     get' = getImpl
     {-# INLINE get' #-}
 
-instance (Member k v kvs, KnownNat (Ix k (k' := v' ': kvs))) => Member k v (k' := v' ': kvs) where
+instance (Member k v kvs, Index i ~ Ix k (k' := v' ': kvs), KnownNat i) => Member k v (k' := v' ': kvs) where
     get' = getImpl
     {-# INLINE get' #-}
 
@@ -166,7 +198,7 @@ class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: Int -> proxy k -> Dict kvs -> v
 
 instance Member k v (k := v ': kvs) where
-    get' !i _ (Dict d) = unsafeCoerce $ d `P.indexArray` i
+    get' !i _ (Dict d) = unsafeFromAny $ d `P.indexArray` i
 
 instance Member k v kvs => Member k v (k' := v' ': kvs) where
     get' !i k d = get' (i + 1) k (unsafeCoerce d :: Dict kvs)
