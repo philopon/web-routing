@@ -174,7 +174,7 @@ type family Ix' (i :: Nat) (k :: Symbol) (kvs :: [KV *]) :: GetResult where
   Ix' i k (k  := v ': kvs) = NotInDicrionary i
   Ix' i k (k' := v ': kvs) = Ix' (i + 1) k kvs
 
-type Ix = Ix' 0
+type Ix k kvs = Ix' 0 k kvs
 
 type Index = NotInDicrionary
 
