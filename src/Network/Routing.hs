@@ -95,7 +95,7 @@ module Network.Routing
 import Prelude hiding(any)
 import Control.Monad(MonadPlus(..))
 
-import Network.Routing.Compat(KnownSymbol, symbolVal)
+import GHC.TypeLits.Compat(KnownSymbol, symbolVal)
 import qualified Network.Routing.Dict.Internal as D
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H

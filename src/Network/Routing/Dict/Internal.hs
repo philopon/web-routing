@@ -30,8 +30,8 @@ module Network.Routing.Dict.Internal
 
 import GHC.Exts(Any)
 
-import GHC.TypeLits
-import Network.Routing.Compat
+import Data.Proxy.Compat
+import GHC.TypeLits.Compat
 import Data.Typeable(typeOf, Typeable, TypeRep)
 import Data.List(intercalate)
 import Unsafe.Coerce
