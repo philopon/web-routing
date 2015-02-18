@@ -63,6 +63,7 @@ module Network.Routing
     ( Method
       -- * Path 
     , Path
+    , showPath, getMethod
     , root
       -- ** children
     , exact
@@ -191,12 +192,25 @@ action :: Maybe Method -- ^ if Nothing, any method allowed
 action  = Action
 
 instance Show (Path d m a) where
-    show = go id
-      where
-        go :: (String -> String) -> Path d m a -> String
-        go s (Exact t ps) = go (s . (++) ('/' : T.unpack t)) ps
-        go s (Param l _ ps) = go (s . (++) ('/': l)) ps
-        go s (Action m _) = maybe "*" SC.unpack m ++ ' ': s []
+    show p = maybe "*" SC.unpack (getMethod p) ++ ' ': showPath p
+
+-- | show path. since v0.6.0.
+showPath :: Path d m a -> String
+showPath = go id
+  where
+    go :: (String -> String) -> Path d m a -> String
+    go s (Exact t   ps) = go (s . (++) ('/' : T.unpack t)) ps
+    go s (Param l _ ps) = go (s . (++) ('/' : l)) ps
+    go s (Action _ _)   = s []
+
+-- | get method. since v0.6.0.
+getMethod :: Path d m a -> Maybe Method
+getMethod = go
+  where
+    go :: Path d m a -> Maybe Method
+    go (Action m _)   = m
+    go (Exact _   ps) = go ps
+    go (Param _ _ ps) = go ps
 
 -- | router
 data Router d m a where
