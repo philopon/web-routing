@@ -36,8 +36,8 @@ readInt t = case decimal t of
     Right (i, "") -> Just i
     _ -> Nothing
 
-test :: Path '[] Maybe Int
-test = root $ exact "foo" $
+largePath :: Path '[] Maybe Int
+largePath = root $ exact "foo" $
     r p0 $ r p1 $ r p2 $ r p3 $ r p4 $
     r p5 $ r p6 $ r p7 $ r p8 $ r p9 $
     r p10 $ r p11 $ r p12 $ r p13 $ r p14 $
@@ -50,16 +50,53 @@ test = root $ exact "foo" $
   where
     r p = fetch p readInt
 
-route :: Router '[] Maybe Int
-route = test +| empty
+largePathRoute :: Router '[] Maybe Int
+largePathRoute = largePath +| empty
 
-testPath :: [T.Text]
-testPath = "foo" : map (T.pack . show) [0..19::Int]
+testLargePath :: [T.Text]
+testLargePath = "foo" : map (T.pack . show) [0..19::Int]
+
+benchLargePath :: [T.Text] -> Maybe Int
+benchLargePath = execute largePathRoute "GET"
+
+testRoute :: Router '[] Maybe T.Text
+testRoute =
+    hello +| param +| (foldr (\i r -> deep i +| r) (after +| empty) [0..100])
+  where
+    hello = exact "echo" $ exact "hello-world" $ action (Just "GET") $ \_ -> Just "Hello World"
+
+    pS = Proxy :: Proxy "S"
+    pI = Proxy :: Proxy "I"
+    param = exact "echo" $ exact "plain" $ fetch pS Just $ fetch pI readInt $ action (Just "GET") $ \d ->
+        Just $ T.replicate (get pI d) (get pS d)
+
+    deep i = exact "deep" $ exact "foo" $ exact "bar" $ exact "baz" $ exact (T.pack $ show i) $ action (Just "GET") $ \_ ->
+        Just (T.pack $ show (i :: Int))
+
+    after = exact "after" $ action (Just "GET") $ \_ -> Just "after"
+
+benchApiaryBenchmark :: [T.Text] -> Maybe T.Text
+benchApiaryBenchmark = execute testRoute "GET"
 
 main :: IO ()
 main = do
-    unless ((execute route "GET") testPath == Just 190) $
-        fail "result not matched"
+    unless (benchLargePath testLargePath == Just 190) $ fail "largePath: result not matched"
+
+    let hello = ["echo", "hello-world"]
+        param = ["echo", "plain", "foo", "12"]
+        deep  = ["deep", "foo", "bar", "baz", "100"]
+        after = ["after"]
+    unless (benchApiaryBenchmark hello == Just "Hello World") $ fail "hello: result not matched"
+    unless (benchApiaryBenchmark param == Just (T.replicate 12 "foo")) $ fail "param: result not matched"
+    unless (benchApiaryBenchmark deep  == Just "100") $ fail "deep: result not matched"
+    unless (benchApiaryBenchmark after == Just "after") $ fail "after: result not matched"
+    
     defaultMain
-        [ bench "routing" $ nf (execute route "GET") testPath
+        [ bench "largePath" $ nf benchLargePath testLargePath
+        , bgroup "apiary"
+            [ bench "hello" $ nf benchApiaryBenchmark hello
+            , bench "param" $ nf benchApiaryBenchmark param
+            , bench "deep"  $ nf benchApiaryBenchmark deep
+            , bench "after" $ nf benchApiaryBenchmark after 
+            ]
         ]
