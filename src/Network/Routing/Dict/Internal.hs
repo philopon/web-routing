@@ -41,9 +41,11 @@ import Control.Monad.ST (ST, runST)
 
 unsafeToAny :: a -> Any
 unsafeToAny = unsafeCoerce
+{-# INLINABLE unsafeToAny #-}
 
 unsafeFromAny :: Any -> a
 unsafeFromAny = unsafeCoerce
+{-# INLINABLE unsafeFromAny #-}
 
 -- | (kind) key-value pair
 data KV v = Symbol := v
@@ -67,9 +69,11 @@ data Store kvs = Store
 
 emptyStore :: Store '[]
 emptyStore = Store 0 Empty
+{-# INLINABLE emptyStore #-}
 
 emptyDict :: Dict '[]
 emptyDict = mkDict emptyStore
+{-# INLINABLE emptyDict #-}
 
 -- | (kind) pretty print type error of 'add'.
 --
@@ -105,6 +109,7 @@ type k </ v = HasKey k v ~ AlreadyHasKey k
 -- Store {bar = "baz" :: [Char], foo = 12 :: Int}
 add :: (k </ kvs) => proxy k -> v -> Store kvs -> Store (k := v ': kvs)
 add _ v (Store l c) = Store (l + 1) (Cons v c)
+{-# INLINABLE add #-}
 
 -- | heterogeneous dictionary
 --
@@ -141,10 +146,12 @@ mkDict' store = do
             P.writeArray array i (unsafeToAny v)
             loop (i + 1) ss
         loop _ Empty = return ()
+{-# INLINABLE mkDict' #-}
 
 -- | O(n) convert "Store" to "Dictionary".
 mkDict :: Store kvs -> Dict kvs
 mkDict store = runST $ mkDict' store
+{-# INLINABLE mkDict #-}
 
 -- | O(1) (>= ghc-7.8), O(n) (< ghc-7.8) get key from dictionary
 --
@@ -180,6 +187,7 @@ type Index = NotInDicrionary
 
 getImpl :: forall i proxy k kvs v. (Index i ~ Ix k kvs, KnownNat i) => proxy (k :: Symbol) -> Dict kvs -> v
 getImpl _ (Dict d) = unsafeFromAny $ d `P.indexArray` fromIntegral (natVal (Proxy :: Proxy i))
+{-# INLINABLE getImpl #-}
 
 class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: proxy k -> Dict kvs -> v
@@ -199,9 +207,11 @@ class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
 
 instance Member k v (k := v ': kvs) where
     get' !i _ (Dict d) = unsafeFromAny $ d `P.indexArray` i
+    {-# INLINE get' #-}
 
 instance Member k v kvs => Member k v (k' := v' ': kvs) where
     get' !i k d = get' (i + 1) k (unsafeCoerce d :: Dict kvs)
+    {-# INLINE get' #-}
 
 get = get' 0
 #endif

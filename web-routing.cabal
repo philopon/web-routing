@@ -1,7 +1,6 @@
 name:                web-routing
-version:             0.5.0
+version:             0.6.0
 synopsis:            simple routing library
--- description:         
 license:             MIT
 license-file:        LICENSE
 author:              HirotomoMoriwaki<philopon.dependence@gmail.com>
