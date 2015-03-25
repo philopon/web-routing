@@ -1,6 +1,5 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -12,6 +11,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
+
+#if __GLASGOW_HASKELL < 710
+{-# LANGUAGE OverlappingInstances #-}
+#endif
 
 module Network.Routing.Dict.Internal
     ( Dict, Store
@@ -192,7 +195,11 @@ getImpl _ (Dict d) = unsafeFromAny $ d `P.indexArray` fromIntegral (natVal (Prox
 class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: proxy k -> Dict kvs -> v
 
+#if __GLASGOW_HASKELL__ >= 710
+instance {-# OVERLAPPING #-} Member k v (k := v ': kvs) where
+#else
 instance Member k v (k := v ': kvs) where
+#endif
     get' = getImpl
     {-# INLINE get' #-}
 
