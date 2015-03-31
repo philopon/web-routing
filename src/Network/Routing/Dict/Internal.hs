@@ -39,7 +39,7 @@ import Data.Typeable(typeOf, Typeable, TypeRep)
 import Data.List(intercalate)
 import Unsafe.Coerce
 import qualified Control.Monad.Primitive as P
-import qualified Data.Primitive as P
+import qualified Data.Primitive.Array as P
 import Control.Monad.ST (ST, runST)
 
 unsafeToAny :: a -> Any
