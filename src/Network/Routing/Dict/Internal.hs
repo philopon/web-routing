@@ -12,7 +12,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
 
-#if __GLASGOW_HASKELL < 710
+#if __GLASGOW_HASKELL__ < 710
 {-# LANGUAGE OverlappingInstances #-}
 #endif
 
@@ -57,7 +57,7 @@ data KV v = Symbol := v
 --
 -- `add` and `mkDict` operation only allowed.
 data KVList (kvs :: [KV *]) where
-    Cons  :: v -> KVList kvs -> KVList (k := v ': kvs)
+    Cons  :: v -> KVList kvs -> KVList (k ':= v ': kvs)
     Empty :: KVList '[]
 
 instance ShowDict kvs => Show (Store kvs) where
@@ -91,16 +91,16 @@ data AddResult
 
 #if __GLASGOW_HASKELL__ > 707
 type family HasKey (k :: Symbol) (kvs :: [KV *]) :: AddResult where
-  HasKey k '[] = AlreadyHasKey k
-  HasKey k (k  := v ': kvs) = Dictionary
-  HasKey k (k' := v ': kvs) = HasKey k kvs
+  HasKey k '[] = 'AlreadyHasKey k
+  HasKey k (k  ':= v ': kvs) = 'Dictionary
+  HasKey k (k' ':= v ': kvs) = HasKey k kvs
 #else
 type family   HasKey (k :: Symbol) (kvs :: [KV *]) :: AddResult
-type instance HasKey k kvs = AlreadyHasKey k
+type instance HasKey k kvs = 'AlreadyHasKey k
 #endif
 
 -- | 'not elem key' constraint(ghc >= 7.8)
-type k </ v = HasKey k v ~ AlreadyHasKey k
+type k </ v = HasKey k v ~ 'AlreadyHasKey k
 
 -- | O(1) add key value pair to dictionary.
 --
@@ -110,7 +110,7 @@ type k </ v = HasKey k v ~ AlreadyHasKey k
 --
 -- >>> add (Proxy :: Proxy "bar") "baz" a
 -- Store {bar = "baz" :: [Char], foo = 12 :: Int}
-add :: (k </ kvs) => proxy k -> v -> Store kvs -> Store (k := v ': kvs)
+add :: (k </ kvs) => proxy k -> v -> Store kvs -> Store (k ':= v ': kvs)
 add _ v (Store l c) = Store (l + 1) (Cons v c)
 {-# INLINABLE add #-}
 
@@ -125,7 +125,7 @@ class ShowDict (kvs :: [KV *]) where
 instance ShowDict '[] where
     showDict _ _ = []
 
-instance (KnownSymbol k, Typeable v, Show v, ShowDict kvs) => ShowDict (k := v ': kvs) where
+instance (KnownSymbol k, Typeable v, Show v, ShowDict kvs) => ShowDict (k ':= v ': kvs) where
     showDict i (Dict t) =
         (symbolVal (Proxy :: Proxy k), show (unsafeFromAny $ P.indexArray t i :: v), typeOf (undefined :: v)):
         showDict (i + 1) (unsafeCoerce $ Dict t :: Dict kvs)
@@ -180,13 +180,13 @@ data GetResult
 #if __GLASGOW_HASKELL__ > 707
 
 type family Ix' (i :: Nat) (k :: Symbol) (kvs :: [KV *]) :: GetResult where
-  Ix' i k '[] = Key k
-  Ix' i k (k  := v ': kvs) = NotInDicrionary i
-  Ix' i k (k' := v ': kvs) = Ix' (i + 1) k kvs
+  Ix' i k '[] = 'Key k
+  Ix' i k (k  ':= v ': kvs) = 'NotInDicrionary i
+  Ix' i k (k' ':= v ': kvs) = Ix' (i + 1) k kvs
 
 type Ix k kvs = Ix' 0 k kvs
 
-type Index = NotInDicrionary
+type Index = 'NotInDicrionary
 
 getImpl :: forall i proxy k kvs v. (Index i ~ Ix k kvs, KnownNat i) => proxy (k :: Symbol) -> Dict kvs -> v
 getImpl _ (Dict d) = unsafeFromAny $ d `P.indexArray` fromIntegral (natVal (Proxy :: Proxy i))
@@ -196,14 +196,14 @@ class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: proxy k -> Dict kvs -> v
 
 #if __GLASGOW_HASKELL__ >= 710
-instance {-# OVERLAPPING #-} Member k v (k := v ': kvs) where
+instance {-# OVERLAPPING #-} Member k v (k ':= v ': kvs) where
 #else
-instance Member k v (k := v ': kvs) where
+instance Member k v (k ':= v ': kvs) where
 #endif
     get' = getImpl
     {-# INLINE get' #-}
 
-instance (Member k v kvs, Index i ~ Ix k (k' := v' ': kvs), KnownNat i) => Member k v (k' := v' ': kvs) where
+instance (Member k v kvs, Index i ~ Ix k (k' ':= v' ': kvs), KnownNat i) => Member k v (k' ':= v' ': kvs) where
     get' = getImpl
     {-# INLINE get' #-}
 
@@ -212,11 +212,11 @@ get = get'
 class Member (k :: Symbol) (v :: *) (kvs :: [KV *]) | k kvs -> v where
     get' :: Int -> proxy k -> Dict kvs -> v
 
-instance Member k v (k := v ': kvs) where
+instance Member k v (k ':= v ': kvs) where
     get' !i _ (Dict d) = unsafeFromAny $ d `P.indexArray` i
     {-# INLINE get' #-}
 
-instance Member k v kvs => Member k v (k' := v' ': kvs) where
+instance Member k v kvs => Member k v (k' ':= v' ': kvs) where
     get' !i k d = get' (i + 1) k (unsafeCoerce d :: Dict kvs)
     {-# INLINE get' #-}
 
