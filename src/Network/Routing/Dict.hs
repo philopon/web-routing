@@ -38,4 +38,4 @@ import Network.Routing.Dict.Internal
 --
 type family   Members (kvs :: [KV *]) (prms :: [KV *]) :: Constraint
 type instance Members '[] prms = ()
-type instance Members (k := v ': kvs) prms = (Member k v prms, Members kvs prms)
+type instance Members (k ':= v ': kvs) prms = (Member k v prms, Members kvs prms)

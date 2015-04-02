@@ -167,7 +167,7 @@ raw = Param
 fetch :: (MonadPlus m, KnownSymbol k, k D.</ d)
       => proxy k -- ^ dictionary key
       -> (T.Text -> Maybe v) -- ^ reading function
-      -> Path (k D.:= v ': d) m a -> Path d m a
+      -> Path (k 'D.:= v ': d) m a -> Path d m a
 fetch p f = Param (':' : symbolVal p) go
   where
     go _ [] = mzero
@@ -185,7 +185,7 @@ any = Param "**" go
 
 -- | take any pathes as [Text]
 rest :: (KnownSymbol k, Monad m, k D.</ d) => proxy k -- ^ dictionary key
-     -> Path (k D.:= [T.Text] ': d) m a -> Path d m a
+     -> Path (k 'D.:= [T.Text] ': d) m a -> Path d m a
 rest k = Param (':': symbolVal k ++ "**") go
   where
     go d r = return (D.add k r d, [])
