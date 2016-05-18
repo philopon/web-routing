@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TypeFamilies #-}
 
 import Control.Monad
 import Data.Proxy
@@ -90,13 +91,13 @@ main = do
     unless (benchApiaryBenchmark param == Just (T.replicate 12 "foo")) $ fail "param: result not matched"
     unless (benchApiaryBenchmark deep  == Just "100") $ fail "deep: result not matched"
     unless (benchApiaryBenchmark after == Just "after") $ fail "after: result not matched"
-    
+
     defaultMain
         [ bench "largePath" $ nf benchLargePath testLargePath
         , bgroup "apiary"
             [ bench "hello" $ nf benchApiaryBenchmark hello
             , bench "param" $ nf benchApiaryBenchmark param
             , bench "deep"  $ nf benchApiaryBenchmark deep
-            , bench "after" $ nf benchApiaryBenchmark after 
+            , bench "after" $ nf benchApiaryBenchmark after
             ]
         ]
